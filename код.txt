@@ -3,7 +3,7 @@ import numpy as np
 import pathlib
 from pathlib import Path
 
-# загружаем файл United.xls как датафрейм united
+# загружаем прайс United.xls как датафрейм united
 df = pd.read_excel("D:/Avito XML/Prices/United.xls", header=None).loc[9:, :]
 df.rename(columns={1: 'Артикул', 2: 'Модель', 5: 'Наличие', 8: 'Ожидание', 11: 'ОПТ', 9: 'РРЦ'}, inplace=True)
 df = df[['Артикул', 'Модель', 'Наличие', 'Ожидание', 'ОПТ', 'РРЦ']]
@@ -11,18 +11,18 @@ exclude_values = ['Уточняйте ', 'Уточняйте', 'не для пр
 df = df.loc[~df['РРЦ'].isin(exclude_values) & ~df['ОПТ'].isin(exclude_values) & (df['РРЦ'] != 0) & (df['ОПТ'] != 0)]
 united = df.rename(columns={'df': 'united'})
 
-# загружаем файл Excel.xlsx как датафрейм df
-df = pd.read_csv('catalog.csv', delimiter=";")
+# загружаем файл catalog.csv как датафрейм df
+from_site = pd.read_csv('catalog.csv', delimiter=";")
 
-# округляем столбец 'РРЦ' в датафрейме united до целого числа, заменяем значения +/-inf на NaN, затем заполняем пропущенные значения 0. 
+# округляем столбец 'РРЦ' в датафрейме united до целого числа, заменяем значения +/-inf на NaN, затем заполняем пропущенные значения 0.
 # Преобразуем столбец 'РРЦ' к строковому формату
 united['РРЦ'] = united['РРЦ'].replace([np.inf, -np.inf], np.nan).fillna(0).astype(float).apply(lambda x: int(x // 100 * 100)).astype(str)
 
 # преобразуем тип данных столбца 'Артикул' в датафрейме united к строковому формату
 united['Артикул'] = united['Артикул'].astype(str)
 
-# объединяем датафреймы df и united по столбцу 'Артикул' и создаем новый датафрейм result
-result = pd.merge(df, united[['Артикул', 'Наличие', 'Ожидание', 'РРЦ']], left_on='Артикул модификации', right_on='Артикул', how='left')
+# объединяем датафреймы from_site и united по столбцу 'Артикул' и создаем новый датафрейм result
+result = pd.merge(from_site, united[['Артикул', 'Наличие', 'Ожидание', 'РРЦ']], left_on='Артикул модификации', right_on='Артикул', how='left')
 
 # удаляем нули в конце строки в столбце 'Артикул_y'
 result['Артикул_y'] = result['Артикул_y'].astype(str).str.rstrip('0').str.rstrip('.')
@@ -31,7 +31,7 @@ result['Артикул_y'] = result['Артикул_y'].astype(str).str.rstrip('
 result['Наличие'] = result['Наличие'].astype(str).str.rstrip('0').str.rstrip('.').apply(pd.to_numeric, errors='coerce')
 
 # присваиваем нулевое значение столбцу 'Количество' в строках, где 'Наличие'=0, и сохраняем текущее значение, в противном случае
-result['Количество'] = result.apply(lambda row: 0 if row['Наличие']==0 else row['Количество'], axis=1)
+result['Количество'] = result.apply(lambda row: 0 if row['Наличие'] == 0 else row['Количество'], axis=1)
 
 # присваиваем столбцу 'Количество' значение 'Наличие', только если 'Наличие' > 0 и значение столбца 'Артикул_y' не равно NaN (обозначает отсутствие значения), иначе оставляем текущее значение столбца 'Количество'
 result['Количество'] = np.where(result['Наличие'].isnull(), 0, np.where((result['Наличие'] > 0) & (~result['Артикул_y'].isna()), result['Наличие'], result['Количество']))
@@ -49,36 +49,31 @@ result.loc[result['Ожидание'] > 0, 'Под заказ'] = '+'
 # выбираем только необходимые столбцы 'Название объявления - Title', 'Цена склада', 'United Music' 
 sklad = pd.read_excel("D:/Avito XML/!Товары.xlsm", header=0)
 sklad = sklad.loc[sklad['Склад'] == 1]
-sklad = sklad.loc[:, ['Название объявления - Title', 'Цена склада', 'United Music']]
-
+sklad = sklad.loc[:, ['Название объявления - Title', 'Цена склада', 'United']]
 
 # Удаление точки и всего, что после нее
-sklad['United Music'] = sklad['United Music'].astype(str).str.split('.').str[0]
+sklad['United'] = sklad['United'].astype(str).str.split('.').str[0]
 sklad['Цена склада'] = sklad['Цена склада'].astype(str).str.split('.').str[0]
-# Преобразование столбца 'United Music' в строковый тип
-sklad['United Music'] = sklad['United Music'].astype(str)
+# Преобразование столбца 'United' в строковый тип
+sklad['United'] = sklad['United'].astype(str)
 sklad['Цена склада'] = sklad['Цена склада'].astype(str)
 
-
 # объединяем датафреймы result и sklad по столбцу 'Артикул модификации' и создаем новый датафрейм result
-result = pd.merge(result, sklad[['Цена склада', 'United Music']], left_on='Артикул модификации', right_on='United Music', how='left')
+result = pd.merge(result, sklad[['Цена склада', 'United']], left_on='Артикул модификации', right_on='United', how='left')
 
-
-# присваиваем значение 'Цена склада' столбцу 'Цена', и значение 1 столбцу 'Количество' в тех строках, где значение столбца 'United Music' не равно NaN, а значение столбца 'United Music' совпадает со значением столбца 'Артикул модификации'
-condition = (result['United Music'].notnull()) & (result['United Music'] == result['Артикул модификации'])
+# присваиваем значение 'Цена склада' столбцу 'Цена', и значение 1 столбцу 'Количество' в тех строках, где значение столбца 'United' не равно NaN, а значение столбца 'United Music' совпадает со значением столбца 'Артикул модификации'
+condition = (result['United'].notnull()) & (result['United'] == result['Артикул модификации'])
 result.loc[condition, 'Цена'] = result['Цена склада']
 result.loc[condition, 'Количество'] = 1
 
 # удаляем ненужные столбцы
-result = result.drop(['Артикул_y','Наличие','РРЦ', 'Ожидание', 'Цена склада', 'United Music'], axis=1)
+result = result.drop(['Артикул_y', 'Наличие', 'РРЦ', 'Ожидание', 'Цена склада', 'United'], axis=1)
 # переименовываем
 result = result.rename(columns={'Артикул_x': 'Артикул'})
-
 
 result['Цена'] = result['Цена'].str.replace(',00', '')
 # Преобразование столбца 'Цена' в строковый тип
 result['Цена'] = result['Цена'].astype(str)
-
 
 result.to_excel('Result - Удалить.xlsx', index=False)
 result.to_csv('Result - Загрузить на сайт.csv', index=False, sep=";")
